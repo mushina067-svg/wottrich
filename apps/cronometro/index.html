@@ -6437,6 +6437,7 @@ function closeEditModal(){document.getElementById("edit-session-modal").style.di
     return "https://" + host;
   }
   var cfg = { url: normUrl(LS.getItem("wt-sb-url")||""), key: (LS.getItem("wt-sb-key")||"").trim() };
+  var showEdit = false;
   var sb = null, user = null, pushTimer = null, applying = false, lastPull = 0;
 
   function mtimeKey(k){ return "wt-lm-" + k; }
@@ -6789,18 +6790,49 @@ function closeEditModal(){document.getElementById("edit-session-modal").style.di
     if(!host) return;
 
     // 1) Falta configurar el proyecto
-    if(!cfg.url || !cfg.key){
+    if(!cfg.url || !cfg.key || showEdit){
       host.innerHTML =
         "<div style='font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:10px;'>Peg\u00e1 los datos de tu proyecto de Supabase (Project Settings \u2192 API). Se guardan solo en este dispositivo.</div>" +
-        "<input id='wt-sb-url' style=\""+INP+"\" placeholder='https://xxxx.supabase.co' value=\""+esc(cfg.url)+"\">" +
-        "<input id='wt-sb-key' style=\""+INP+"\" placeholder='anon public key' value=\""+esc(cfg.key)+"\">" +
-        "<button type='button' id='wt-sb-save' style=\""+BTN+"width:100%;border:.5px solid var(--bb);background:var(--bd);color:var(--bt);\">Guardar conexi\u00f3n</button>";
+        "<input id='wt-sb-url' data-no-blur autocapitalize='none' autocorrect='off' spellcheck='false' style=\""+INP+"\" placeholder='https://xxxx.supabase.co' value=\""+esc(cfg.url)+"\">" +
+        "<input id='wt-sb-key' data-no-blur autocapitalize='none' autocorrect='off' spellcheck='false' style=\""+INP+"\" placeholder='anon public key' value=\""+esc(cfg.key)+"\">" +
+        "<button type='button' id='wt-sb-paste' style=\""+BTN+"width:100%;margin-bottom:8px;border:.5px solid var(--b2);background:transparent;color:var(--muted);\">\ud83d\udccb Pegar desde el portapapeles</button>" +
+        "<button type='button' id='wt-sb-save' style=\""+BTN+"width:100%;border:.5px solid var(--bb);background:var(--bd);color:var(--bt);\">Guardar conexi\u00f3n</button>" +
+        (showEdit ? "<button type='button' id='wt-sb-cancel' style=\""+BTN+"width:100%;margin-top:8px;border:.5px solid var(--b2);background:transparent;color:var(--faint);\">Cancelar</button>" : "") +
+        "<div id='wt-sb-paste-msg' style='font-size:11px;line-height:1.45;margin-top:8px;min-height:14px;color:var(--faint);'></div>";
       document.getElementById("wt-sb-save").onclick = function(){
         cfg.url = normUrl(document.getElementById("wt-sb-url").value);
         cfg.key = document.getElementById("wt-sb-key").value.trim();
         if(!cfg.url || !cfg.key){ alert("Complet\u00e1 los dos campos."); return; }
         LS.setItem("wt-sb-url", cfg.url); LS.setItem("wt-sb-key", cfg.key);
-        sb = null; renderCloud(); boot();
+        showEdit = false; sb = null; renderCloud(); boot();
+      };
+      var cancelBtn = document.getElementById("wt-sb-cancel");
+      if(cancelBtn){ cancelBtn.onclick = function(){ showEdit = false; renderCloud(); }; }
+      function pasteMsg(t, c){
+        var el = document.getElementById("wt-sb-paste-msg");
+        if(el){ el.textContent = t; el.style.color = c || "var(--faint)"; }
+      }
+      function putInto(txt){
+        txt = String(txt || "").replace(/[\r\n\t]/g, "").trim();
+        if(!txt){ pasteMsg("El portapapeles est\u00e1 vac\u00edo. Copi\u00e1 primero el dato en Supabase.", "var(--rt)"); return; }
+        var uEl = document.getElementById("wt-sb-url"), kEl = document.getElementById("wt-sb-key");
+        if(/^https?:\/\//i.test(txt)){
+          uEl.value = txt.replace(/\s+/g, "");
+          pasteMsg("Direcci\u00f3n pegada \u2713 Ahora copi\u00e1 la clave y toc\u00e1 Pegar de nuevo.", "var(--gt)");
+        }else{
+          kEl.value = txt.replace(/\s+/g, "");
+          pasteMsg("Clave pegada \u2713 Toc\u00e1 Guardar conexi\u00f3n.", "var(--gt)");
+        }
+      }
+      document.getElementById("wt-sb-paste").onclick = function(){
+        if(!navigator.clipboard || !navigator.clipboard.readText){
+          pasteMsg("Tu navegador no puede leer el portapapeles. Toc\u00e1 el campo y us\u00e1 Mantener presionado \u2192 Pegar.", "var(--rt)");
+          return;
+        }
+        pasteMsg("Leyendo el portapapeles\u2026");
+        navigator.clipboard.readText().then(putInto).catch(function(){
+          pasteMsg("No se pudo leer el portapapeles. Toc\u00e1 el campo y us\u00e1 Mantener presionado \u2192 Pegar.", "var(--rt)");
+        });
       };
       return;
     }
@@ -6867,14 +6899,7 @@ function closeEditModal(){document.getElementById("edit-session-modal").style.di
           .then(function(){ setBusy(upBtn, false); });
       });
       document.getElementById("wt-sb-forget").onclick = function(){
-        var u = prompt("Project URL de Supabase:", cfg.url);
-        if(u === null) return;
-        var k = prompt("Clave anon / public:", cfg.key);
-        if(k === null) return;
-        u = normUrl(u); k = (k||"").trim();
-        if(!u || !k){ alert("Complet\u00e1 los dos campos."); return; }
-        LS.setItem("wt-sb-url", u); LS.setItem("wt-sb-key", k);
-        cfg = { url:u, key:k }; sb = null; user = null; renderCloud(); boot();
+        showEdit = true; renderCloud();
       };
       return;
     }
@@ -7077,37 +7102,45 @@ function closeEditModal(){document.getElementById("edit-session-modal").style.di
     }catch(e){}
   }
   function isProtected(el){
-    // v27: no quitamos el foco mientras se edita un tiempo o un modal abierto
+    // v20b: no quitamos el foco mientras se edita un tiempo, un modal abierto,
+    // la pantalla de Config o los campos de la nube (direccion / clave / usuario).
     try{
       if(!el) return false;
       if(el.id==='rep-edit-inp') return true;
-      if(el.closest && el.closest('.rep-edit-overlay,.modal,.edit-modal,[data-no-blur]')) return true;
+      if(el.closest && el.closest('.rep-edit-overlay,.modal,.edit-modal,[data-no-blur],#view-config,#wt-cloud-body,#wt-mem-list')) return true;
       var ov=document.getElementById('rep-edit-overlay');
       if(ov && ov.className.indexOf('open')>=0) return true;
     }catch(e){}
     return false;
   }
+  var lastFocusAt=0, lastTypeAt=0;
+  document.addEventListener('focusin', function(e){ if(isEditable(e.target)) lastFocusAt=Date.now(); }, true);
+  function recentlyUsed(){ return (Date.now()-lastFocusAt<2500) || (Date.now()-lastTypeAt<6000); }
   function blurNow(){
     var el=document.activeElement;
     if(isProtected(el)) return;
+    if(recentlyUsed()) return;
     if(isEditable(el)){ clearUndo(el); try{ el.blur(); }catch(e){} }
   }
   var t=null;
   function scheduleBlur(ms){ clearTimeout(t); t=setTimeout(blurNow, ms||1200); }
 
-  document.addEventListener('input', function(e){ if(isEditable(e.target)&&!isProtected(e.target)) scheduleBlur(4000); }, true);
-  document.addEventListener('change', function(e){ if(isEditable(e.target)&&!isProtected(e.target)) blurNow(); }, true);
+  document.addEventListener('input', function(e){ if(isEditable(e.target)){ lastTypeAt=Date.now(); if(!isProtected(e.target)) scheduleBlur(6000); } }, true);
+  document.addEventListener('change', function(e){ if(isEditable(e.target)&&!isProtected(e.target)&&!recentlyUsed()) blurNow(); }, true);
   document.addEventListener('touchmove', function(){ blurNow(); }, {passive:true, capture:true});
   window.addEventListener('scroll', function(){ blurNow(); }, {passive:true, capture:true});
   document.addEventListener('visibilitychange', function(){ if(document.hidden) blurNow(); });
-  document.addEventListener('keydown', function(e){ if(e.key==='Enter'&&isEditable(e.target)) blurNow(); }, true);
+  document.addEventListener('keydown', function(e){ if(e.key==='Enter'&&isEditable(e.target)&&!isProtected(e.target)) blurNow(); }, true);
 
   // Si el dispositivo se mueve, quitamos el foco antes de que iOS registre la sacudida.
   if(window.DeviceMotionEvent){
+    var prevM=null;
     window.addEventListener('devicemotion', function(ev){
       var a=ev.accelerationIncludingGravity; if(!a) return;
       var m=Math.abs(a.x||0)+Math.abs(a.y||0)+Math.abs(a.z||0);
-      if(m>22) blurNow();
+      var d=(prevM===null)?0:Math.abs(m-prevM); prevM=m;
+      // Solo una sacudida brusca (cambio repentino) o un golpe muy fuerte cierra el teclado.
+      if(d>18 || m>34) blurNow();
     }, {passive:true});
   }
 })();
