@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pizarra de video · Dos videos v4</title>
+<meta name="description" content="Reproducí videos de natación en cámara lenta, pausá cuadro a cuadro y marcá posiciones con lápiz, líneas, flechas y ángulos para capacitaciones.">
+<style>
+  :root{
+    --bg:#0b1220; --card:#111a2e; --border:#24304d; --fg:#e8eefc; --muted:#8fa0c0;
+    --primary:#3b82f6; --primary-fg:#fff; --danger:#ef4444; --input:#0d1526;
+  }
+  *{box-sizing:border-box}
+  [hidden]{display:none!important}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  main{max-width:1150px;margin:0 auto;padding:24px 16px 60px}
+  h1{font-size:24px;margin:0}
+  .sub{color:var(--muted);font-size:14px;margin:4px 0 0}
+  header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;margin-bottom:20px}
+  .layout{display:grid;gap:16px;grid-template-columns:1fr}
+  @media(min-width:1024px){.layout{grid-template-columns:minmax(0,1fr) 320px}}
+  .stage{position:relative;overflow:hidden;border-radius:12px;border:1px solid var(--border);background:#000}
+  video.src{display:none}
+  #vcanvas{display:block;width:100%;max-height:82vh;object-fit:contain;background:#000}
+  .stage svg{position:absolute;touch-action:none}
+  .stage svg.draw{cursor:crosshair}
+  .stage svg.nodraw{pointer-events:none}
+  .timechip{position:absolute;right:12px;top:12px;background:rgba(0,0,0,.7);color:#fff;font-family:ui-monospace,monospace;font-size:14px;padding:4px 8px;border-radius:6px;pointer-events:none}
+  .empty{display:flex;height:256px;align-items:center;justify-content:center;text-align:center;color:var(--muted);font-size:14px;padding:0 24px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px;margin-top:12px}
+  .card h2{font-size:14px;margin:0 0 8px}
+  button{font:inherit;cursor:pointer;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--fg);padding:0 14px;height:40px}
+  button:hover{filter:brightness(1.15)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  button.primary{background:var(--primary);border-color:var(--primary);color:var(--primary-fg)}
+  button.ghost{background:transparent}
+  button.sm{height:34px;font-size:12px;padding:0 10px}
+  button.active{background:var(--primary);border-color:var(--primary);color:#fff}
+  input[type=file],input[type=number],input[type=text]{background:var(--input);border:1px solid var(--border);color:var(--fg);border-radius:8px;height:40px;padding:6px 10px;font:inherit;width:100%}
+  input[type=range]{width:100%}
+  label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
+  .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .row.end{align-items:flex-end}
+  .grow{flex:1}
+  .muted{color:var(--muted);font-size:12px}
+  .err{color:var(--danger);font-size:12px;margin:8px 0 0}
+  .tools{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px}
+  .colors{display:flex;gap:8px;margin-top:12px}
+  .colors button{width:28px;height:28px;border-radius:50%;border:2px solid transparent;padding:0}
+  .colors button.sel{border-color:var(--fg)}
+  .marks{max-height:240px;overflow-y:auto;margin-top:10px;display:flex;flex-direction:column;gap:6px;padding-right:4px}
+  .markrow{display:flex;align-items:center;gap:8px;font-size:12px}
+  .markrow .t{font-family:ui-monospace,monospace;color:var(--primary);text-decoration:underline;background:none;border:none;padding:0;height:auto}
+  .markrow .txt{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+  .markrow .del{color:var(--danger);background:none;border:none;padding:0;height:auto;margin-left:auto}
+  .w90{width:90px}.w110{width:110px}
+  aside{align-self:start}
+  @media(min-width:1024px){aside{position:sticky;top:16px}}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>Pizarra de video · Capacitación</h1>
+      <p class="sub">Pausá, andá cuadro a cuadro, reproducí en cámara lenta y marcá con el lápiz.</p>
+    </div>
+  </header>
+
+  <div class="layout">
+    <div>
+      <div class="stage" id="stage">
+        <canvas id="vcanvas" width="1280" height="1440"></canvas><video id="va" class="src" playsinline muted></video><video id="vb" class="src" playsinline muted></video>
+        <svg id="overlay" viewBox="0 0 1000 1000" preserveAspectRatio="none" class="draw"></svg>
+        <div class="timechip" id="timechip" hidden>0.00 s</div>
+        <div class="empty" id="empty">Cargá un video (queda en el dispositivo, no se sube a ningún servidor)</div>
+      </div>
+      <p class="err" id="err" hidden></p>
+
+      <div class="card">
+        <input type="range" id="seekbar" min="0" max="1" step="0.033" value="0">
+        <div class="row" style="margin-top:8px">
+          <button id="b-10">-10f</button>
+          <button id="b-1">◀ 1f</button>
+          <button id="b-play" class="primary" style="min-width:96px">Play</button>
+          <button id="b+1">1f ▶</button>
+          <button id="b+10">+10f</button>
+          <span class="muted" style="margin-left:auto" id="durLabel">/ 0.00 s</span>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <span class="muted">Cámara lenta:</span>
+          <span id="rates" class="row"></span>
+        </div>
+      </div>
+
+      <div class="row end" style="margin-top:12px">
+        <div class="grow">
+          <label>Video 1 (arriba)</label>
+          <input type="file" id="file" accept="video/*">
+        </div>
+        <div class="grow">
+          <label>Video 2 (abajo)</label>
+          <input type="file" id="file2" accept="video/*">
+        </div>
+      </div>
+      <div class="row end" style="margin-top:8px">
+        <div class="w90"><label>Desfase video 2 (s)</label><input type="number" id="offB" step="0.01" value="0"></div>
+        <span class="muted">Mover solo arriba:</span><button id="bA-1">▲ Video 1 ◀ 1f</button><button id="bA+1">▲ Video 1 1f ▶</button>
+        <span class="muted">Mover solo abajo:</span><button id="bB-1">▼ Video 2 ◀ 1f</button><button id="bB+1">▼ Video 2 1f ▶</button>
+        <span class="muted" style="flex-basis:100%">Play y los botones grandes mueven los dos juntos. Estos botones mueven un solo video para alinearlos (ej. en el sonido de salida).</span>
+        <div class="w90">
+          <label>FPS</label>
+          <input type="number" id="fps" min="1" value="30">
+        </div>
+        <button id="b-shot" disabled>📸 Descargar captura</button>
+      </div>
+
+      <div class="card">
+        <h2>Descargar video con las marcas</h2>
+        <div class="row end">
+          <div class="w110"><label>Desde (s)</label><input type="number" id="tIni" step="0.1" value="0"></div>
+          <div class="w110"><label>Hasta (s)</label><input type="number" id="tFin" step="0.1" value="0"></div>
+          <button id="b-ini" class="sm" disabled>Inicio = actual</button>
+          <button id="b-fin" class="sm" disabled>Fin = actual</button>
+          <button id="b-slow" class="sm">Velocidad normal</button>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <button id="b-exp-tramo" class="primary" disabled>🎬 Descargar tramo</button>
+          <button id="b-exp-full" disabled>⬇️ Descargar video completo</button>
+          <span class="muted" id="expMsg" hidden>Grabando… el video se reproduce hasta el final del tramo.</span>
+        </div>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card" style="margin-top:0">
+        <div class="row" style="justify-content:space-between">
+          <h2 style="margin:0">Marcador</h2>
+          <button id="b-drawmode" class="sm active">Dibujo activo</button>
+        </div>
+        <div class="tools" id="tools"></div>
+        <div class="colors" id="colors"></div>
+        <div style="margin-top:12px">
+          <label>Grosor: <span id="wLabel">6</span></label>
+          <input type="range" id="width" min="2" max="16" step="1" value="6">
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button id="b-undo" class="sm grow">Deshacer</button>
+          <button id="b-clear" class="sm grow ghost">Limpiar</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Fijar marca en <span id="markTime">0.00</span> s</h2>
+        <label>Comentario</label>
+        <input type="text" id="mText" placeholder="Ej: codo alto · entrada 30 cm">
+        <div style="margin-top:10px">
+          <label>Duración visible: <span id="durVal">3</span> s</label>
+          <input type="range" id="mDur" min="1" max="10" step="1" value="3">
+        </div>
+        <button id="b-freeze" class="sm active" style="width:100%;margin-top:10px">⏸ Pausa automática en las marcas</button>
+        <button id="b-save" class="primary" style="width:100%;margin-top:8px">Guardar marca</button>
+        <div class="marks" id="markList"></div>
+        <p class="muted" id="markHint" style="font-size:11px">Dibujá sobre el video y guardá: la marca reaparece automáticamente al pasar por ese instante.</p>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<script>
+"use strict";
+// ---------- utilidades de figuras (viewBox 1000x1000, puntos 0-1) ----------
+const COLORS=[["Rojo","#ef4444"],["Amarillo","#facc15"],["Verde","#22c55e"],["Celeste","#38bdf8"],["Blanco","#ffffff"]];
+const TOOLS=[["libre","✏️ Libre"],["linea","／ Línea"],["flecha","➜ Flecha"],["rect","▭ Rectángulo"],["elipse","◯ Elipse"],["angulo","∠ Ángulo"]];
+const RATES=[0.1,0.25,0.5,0.75,1];
+const newId=(p="m")=>p+"-"+Date.now()+"-"+Math.round(Math.random()*1e6);
+const fmt=(n,d=2)=>(Number.isFinite(n)?n:0).toFixed(d);
+const marksAt=(list,t)=>list.filter(m=>t>=m.t-0.05&&t<=m.t+m.dur);
+
+function shapeToPath(s){
+  const p=s.points.map(n=>n*1000);
+  if(p.length<4)return"";
+  const x1=p[0],y1=p[1],x2=p[p.length-2],y2=p[p.length-1];
+  if(s.kind==="libre"){let d=`M${x1} ${y1}`;for(let i=2;i<p.length;i+=2)d+=` L${p[i]} ${p[i+1]}`;return d;}
+  if(s.kind==="linea")return`M${x1} ${y1} L${x2} ${y2}`;
+  if(s.kind==="flecha"){
+    const ang=Math.atan2(y2-y1,x2-x1),h=28,a1=ang+Math.PI-0.42,a2=ang+Math.PI+0.42;
+    return`M${x1} ${y1} L${x2} ${y2} M${x2} ${y2} L${x2+h*Math.cos(a1)} ${y2+h*Math.sin(a1)} M${x2} ${y2} L${x2+h*Math.cos(a2)} ${y2+h*Math.sin(a2)}`;
+  }
+  if(s.kind==="angulo"){
+    if(p.length<6)return`M${x1} ${y1} L${p[2]} ${p[3]}`;
+    const[ax,ay,vx,vy,bx,by]=p,r=60;
+    const a1=Math.atan2(ay-vy,ax-vx),a2=Math.atan2(by-vy,bx-vx);
+    const arc=`M${vx+r*Math.cos(a1)} ${vy+r*Math.sin(a1)} A${r} ${r} 0 0 ${((a2-a1+Math.PI*2)%(Math.PI*2))>Math.PI?0:1} ${vx+r*Math.cos(a2)} ${vy+r*Math.sin(a2)}`;
+    return`M${ax} ${ay} L${vx} ${vy} L${bx} ${by} ${arc}`;
+  }
+  if(s.kind==="rect")return`M${x1} ${y1} L${x2} ${y1} L${x2} ${y2} L${x1} ${y2} Z`;
+  const rx=Math.abs(x2-x1)/2,ry=Math.abs(y2-y1)/2,cx=(x1+x2)/2,cy=(y1+y2)/2;
+  if(!rx||!ry)return"";
+  return`M${cx-rx} ${cy} a${rx} ${ry} 0 1 0 ${rx*2} 0 a${rx} ${ry} 0 1 0 ${-rx*2} 0`;
+}
+function angleOf(points,ar=1){
+  if(points.length<6)return 0;
+  const[x1,y1,x2,y2,x3,y3]=points;
+  const a=Math.atan2(y1-y2,(x1-x2)*ar),b=Math.atan2(y3-y2,(x3-x2)*ar);
+  let d=Math.abs((a-b)*180/Math.PI);
+  if(d>180)d=360-d;
+  return d;
+}
+function angleLabelPos(points){
+  const x=points[2]??0,y=points[3]??0;
+  return{x:Math.min(0.94,x+0.02),y:Math.max(0.05,y-0.02)};
+}
+function wrapLines(text,max=30){
+  const words=text.split(/\s+/).filter(Boolean),out=[];let line="";
+  for(const w of words){
+    if(!line.length)line=w;
+    else if(line.length+1+w.length<=max)line+=" "+w;
+    else{out.push(line);line=w;}
+  }
+  if(line)out.push(line);
+  return out.length?out:[text];
+}
+function markLabelBox(mark){
+  const all=mark.shapes.flatMap(s=>s.points);
+  if(!all.length)return null;
+  let minX=1,minY=1,maxX=0,maxY=0;
+  for(let i=0;i<all.length;i+=2){
+    const x=all[i]??0,y=all[i+1]??0;
+    minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y);
+  }
+  return{cx:(minX+maxX)/2,bottom:maxY};
+}
+
+// ---------- estado ----------
+const $=id=>document.getElementById(id);
+
+// ---------- dos videos en un solo lienzo ----------
+const VA=document.getElementById("va"),VB=document.getElementById("vb"),VC=document.getElementById("vcanvas"),VCX=VC.getContext("2d");
+let offB=0;
+const has=v=>!!v.getAttribute("src")&&v.videoWidth>0;
+const master=()=>has(VA)||!has(VB)?VA:VB;
+function layout(){
+  const W=1280;
+  const h=v=>has(v)?Math.round(W*v.videoHeight/v.videoWidth/2)*2:720;
+  return{W,ha:h(VA),hb:h(VB)};
+}
+function paint(){
+  const L=layout();
+  if(VC.width!==L.W||VC.height!==L.ha+L.hb){VC.width=L.W;VC.height=L.ha+L.hb;measure();}
+  VCX.fillStyle="#000";VCX.fillRect(0,0,VC.width,VC.height);
+  VCX.fillStyle="#666";VCX.font="600 36px system-ui";VCX.textAlign="center";
+  if(has(VA))VCX.drawImage(VA,0,0,L.W,L.ha);else VCX.fillText("Cargá el video 1",L.W/2,L.ha/2);
+  if(has(VB))VCX.drawImage(VB,0,L.ha,L.W,L.hb);else VCX.fillText("Cargá el video 2",L.W/2,L.ha+L.hb/2);
+  VCX.fillStyle="#fff";VCX.fillRect(0,L.ha-2,L.W,4);VCX.textAlign="left";
+  if(has(VA)&&has(VB)&&!VA.paused){const want=VA.currentTime+offB;if(Math.abs(VB.currentTime-want)>0.12&&want>=0&&want<=VB.duration)VB.currentTime=want;}
+  requestAnimationFrame(paint);
+}
+const bus=new EventTarget();
+["timeupdate","play","pause","seeked","error","ended"].forEach(ev=>[VA,VB].forEach(v=>v.addEventListener(ev,()=>{if(v===master())bus.dispatchEvent(new Event(ev));})));
+[VA,VB].forEach(v=>v.addEventListener("loadedmetadata",()=>{measure();bus.dispatchEvent(new Event("loadedmetadata"));}));
+const video={
+  get videoWidth(){return has(VA)||has(VB)?VC.width:0},
+  get videoHeight(){return has(VA)||has(VB)?VC.height:0},
+  get clientWidth(){return VC.clientWidth},get clientHeight(){return VC.clientHeight},
+  get duration(){const m=master();return m.duration||0},
+  get currentTime(){return master().currentTime},
+  set currentTime(t){if(has(VA)){VA.currentTime=t;if(has(VB))VB.currentTime=Math.max(0,Math.min(VB.duration,t+offB));}else if(has(VB))VB.currentTime=t;},
+  get paused(){return master().paused},get ended(){return master().ended},
+  set playbackRate(r){VA.playbackRate=r;VB.playbackRate=r},get playbackRate(){return master().playbackRate},
+  play(){const ps=[VA,VB].filter(has).map(v=>v.play());return Promise.all(ps);},
+  pause(){VA.pause();VB.pause();},
+  addEventListener(ev,fn){if(ev==="click")VC.addEventListener(ev,fn);else bus.addEventListener(ev,fn);},
+  removeEventListener(ev,fn){if(ev==="click")VC.removeEventListener(ev,fn);else bus.removeEventListener(ev,fn);}
+};
+requestAnimationFrame(paint);
+const overlay=$("overlay"),stage=$("stage");
+let src=null,duration=0,time=0,playing=false,rate=0.5,fps=30;
+let tool="libre",color=COLORS[0][1],width=6,drawMode=true;
+let draft=[],marks=[],texto="",dur=3,congelar=true;
+let box={left:0,top:0,width:0,height:0};
+let ocultas=new Set(),drawing=false,angleStep=0;
+let prevTime=0,resumeTimer=null,exportando=false,expLento=false;
+
+// ---------- medición del letterbox ----------
+function measure(){
+  if(!video.videoWidth||!video.videoHeight)return;
+  const ew=video.clientWidth,eh=video.clientHeight,ar=video.videoWidth/video.videoHeight;
+  const w=ew/eh>ar?eh*ar:ew,h=ew/eh>ar?eh:ew/ar;
+  box={left:(ew-w)/2,top:(eh-h)/2,width:w,height:h};
+  overlay.style.left=box.left+"px";overlay.style.top=box.top+"px";
+  overlay.style.width=box.width+"px";overlay.style.height=box.height+"px";
+}
+new ResizeObserver(measure).observe(VC);
+window.addEventListener("resize",measure);
+
+// ---------- render del overlay ----------
+const SVGNS="http://www.w3.org/2000/svg";
+function aspect(){return box.width&&box.height?box.width/box.height:1;}
+function activeMarksAt(at){const a=marksAt(marks,at);const l=a[a.length-1];return l?[l]:[];}
+function renderOverlay(){
+  while(overlay.firstChild)overlay.removeChild(overlay.firstChild);
+  const editandoNueva=draft.length>0||$("mText").value.trim().length>0;
+  const visibles=editandoNueva?[]:activeMarksAt(time).filter(m=>!ocultas.has(m.id));
+  const shapes=[...visibles.flatMap(m=>m.shapes),...draft];
+  const ar=aspect();
+  for(const s of shapes){
+    const d=shapeToPath(s);if(!d)continue;
+    const p=document.createElementNS(SVGNS,"path");
+    p.setAttribute("d",d);p.setAttribute("fill","none");
+    p.setAttribute("stroke",s.color);p.setAttribute("stroke-width",s.width);
+    p.setAttribute("stroke-linecap","round");p.setAttribute("stroke-linejoin","round");
+    p.setAttribute("vector-effect","non-scaling-stroke");
+    overlay.appendChild(p);
+  }
+  for(const s of shapes){
+    if(s.kind!=="angulo"||s.points.length<6)continue;
+    const pos=angleLabelPos(s.points);
+    const t=document.createElementNS(SVGNS,"text");
+    t.setAttribute("x",pos.x*1000);t.setAttribute("y",pos.y*1000);
+    t.setAttribute("fill",s.color);t.setAttribute("stroke","rgba(0,0,0,0.85)");
+    t.setAttribute("stroke-width","3");t.setAttribute("paint-order","stroke");
+    t.style.fontSize="46px";t.style.fontWeight="700";
+    const sx=ar>=1?1/ar:1,sy=ar>=1?1:ar;
+    t.setAttribute("transform",`translate(${pos.x*1000} ${pos.y*1000}) scale(${sx} ${sy}) translate(${-pos.x*1000} ${-pos.y*1000})`);
+    t.textContent=Math.round(angleOf(s.points,ar))+"°";
+    overlay.appendChild(t);
+  }
+  for(const m of visibles){
+    if(!m.texto)continue;
+    const pos=markLabelBox(m),lines=wrapLines(m.texto,30);
+    const sx=ar>=1?1/ar:1,sy=ar>=1?1:ar,fs=34,lh=fs*1.3;
+    const boxW=Math.min(940/sx,Math.max(...lines.map(l=>l.length))*fs*0.55+40);
+    const boxH=lines.length*lh+22,halfW=boxW*sx/2;
+    let x=(pos?pos.cx:0.5)*1000;
+    x=Math.min(1000-halfW-10,Math.max(halfW+10,x));
+    let top=pos?pos.bottom*1000+30:1000-boxH*sy-40;
+    top=Math.min(1000-boxH*sy-10,Math.max(10,top));
+    const g=document.createElementNS(SVGNS,"g");
+    g.setAttribute("transform",`translate(${x} ${top}) scale(${sx} ${sy}) translate(${-x} ${-top})`);
+    const r=document.createElementNS(SVGNS,"rect");
+    r.setAttribute("x",x-boxW/2);r.setAttribute("y",top);
+    r.setAttribute("width",boxW);r.setAttribute("height",boxH);r.setAttribute("rx",14);
+    r.setAttribute("fill","rgba(0,0,0,0.78)");r.setAttribute("stroke","rgba(255,255,255,0.28)");r.setAttribute("stroke-width","2");
+    g.appendChild(r);
+    lines.forEach((l,i)=>{
+      const t=document.createElementNS(SVGNS,"text");
+      t.setAttribute("x",x);t.setAttribute("y",top+11+lh*(i+0.5));
+      t.setAttribute("fill","#fff");t.setAttribute("text-anchor","middle");t.setAttribute("dominant-baseline","middle");
+      t.style.fontSize=fs+"px";t.style.fontWeight="600";
+      t.textContent=l;g.appendChild(t);
+    });
+    overlay.appendChild(g);
+  }
+}
+
+// ---------- dibujo sobre canvas (captura y exportación) ----------
+function drawOverlay(ctx,cw,ch,shapes,labels){
+  const disp=box.width||cw;
+  ctx.save();ctx.scale(cw/1000,ch/1000);
+  for(const s of shapes){
+    const d=shapeToPath(s);if(!d)continue;
+    ctx.strokeStyle=s.color;
+    const px=Math.max(1,s.width*(cw/disp));
+    ctx.lineWidth=px/((cw/1000+ch/1000)/2);
+    ctx.lineCap="round";ctx.lineJoin="round";
+    ctx.stroke(new Path2D(d));
+  }
+  ctx.restore();
+  ctx.textAlign="left";ctx.textBaseline="alphabetic";
+  for(const sh of shapes){
+    if(sh.kind!=="angulo"||sh.points.length<6)continue;
+    const pos=angleLabelPos(sh.points),label=Math.round(angleOf(sh.points,cw/ch))+"°";
+    ctx.font=`700 ${Math.round(ch*0.045)}px sans-serif`;
+    ctx.lineWidth=Math.max(3,ch*0.006);
+    ctx.strokeStyle="rgba(0,0,0,0.85)";
+    ctx.strokeText(label,pos.x*cw,pos.y*ch);
+    ctx.fillStyle=sh.color;
+    ctx.fillText(label,pos.x*cw,pos.y*ch);
+  }
+  for(const m of labels){
+    if(!m.texto)continue;
+    const pos=markLabelBox(m),fontSize=Math.round(ch*0.042);
+    ctx.font=`600 ${fontSize}px sans-serif`;
+    const pad=ch*0.018,maxBox=cw*0.9;
+    let lines=wrapLines(m.texto,30);
+    while(Math.max(...lines.map(l=>ctx.measureText(l).width))+pad*2>maxBox){
+      const chars=Math.max(10,Math.floor(Math.max(...lines.map(l=>l.length))*0.85));
+      const next=wrapLines(m.texto,chars);
+      if(next.length===lines.length)break;
+      lines=next;
+    }
+    const lineH=fontSize*1.25;
+    const w=Math.min(maxBox,Math.max(...lines.map(l=>ctx.measureText(l).width))+pad*2);
+    const h=lines.length*lineH+pad*1.4;
+    let x=(pos?pos.cx:0.5)*cw;
+    x=Math.min(cw-w/2-8,Math.max(w/2+8,x));
+    let top=pos?pos.bottom*ch+ch*0.03:ch-h-ch*0.05;
+    top=Math.min(ch-h-8,Math.max(8,top));
+    ctx.fillStyle="rgba(0,0,0,0.78)";ctx.strokeStyle="rgba(255,255,255,0.28)";
+    ctx.lineWidth=Math.max(2,ch*0.003);
+    ctx.beginPath();ctx.roundRect(x-w/2,top,w,h,ch*0.015);ctx.fill();ctx.stroke();
+    ctx.fillStyle="#fff";ctx.textAlign="center";ctx.textBaseline="middle";
+    lines.forEach((l,i)=>ctx.fillText(l,x,top+pad*0.7+lineH*(i+0.5)));
+    ctx.textAlign="left";ctx.textBaseline="alphabetic";
+  }
+}
+
+// ---------- transporte ----------
+function cancelResume(){if(resumeTimer!==null){clearTimeout(resumeTimer);resumeTimer=null;}}
+function seek(t){
+  cancelResume();
+  ocultas=new Set();
+  const c=Math.min(Math.max(0,t),video.duration||0);
+  video.currentTime=c;prevTime=c;time=c;
+  updateTimeUI();renderOverlay();
+}
+function step(f){video.pause();seek(video.currentTime+f/fps);}
+async function toggle(){
+  cancelResume();
+  if(video.paused){
+    if(video.duration&&video.currentTime>=video.duration-0.05)video.currentTime=0;
+    prevTime=Math.max(0,video.currentTime-0.001);
+    video.playbackRate=rate;
+    try{await video.play();}catch{setPlaying(false);}
+  }else video.pause();
+}
+function setPlaying(p){
+  playing=p;
+  $("b-play").textContent=p?"Pausa":"Play";
+  if(p)startTick();
+}
+function updateTimeUI(){
+  $("timechip").textContent=fmt(time,2)+" s";
+  $("markTime").textContent=fmt(time,2);
+  $("seekbar").value=time;
+}
+
+// tick cuadro a cuadro: pausa exacta en las marcas
+let rafId=0;
+function startTick(){
+  cancelAnimationFrame(rafId);
+  const tick=()=>{
+    if(!playing)return;
+    const now=video.currentTime,prev=prevTime;
+    time=now;updateTimeUI();
+    if(congelar&&now>prev){
+      const hit=marks.find(m=>m.t>prev&&m.t<=now);
+      if(hit){
+        prevTime=hit.t;
+        video.pause();video.currentTime=hit.t;time=hit.t;
+        updateTimeUI();renderOverlay();
+        cancelResume();
+        resumeTimer=setTimeout(()=>{
+          resumeTimer=null;
+          ocultas=new Set(ocultas).add(hit.id);
+          renderOverlay();
+          video.play().catch(()=>{});
+        },Math.max(1,hit.dur)*1000);
+        return;
+      }
+    }
+    if(ocultas.size){
+      let changed=false;const next=new Set(ocultas);
+      for(const id of next){
+        const m=marks.find(x=>x.id===id);
+        if(!m||now<m.t-0.05){next.delete(id);changed=true;}
+      }
+      if(changed)ocultas=next;
+    }
+    prevTime=now;
+    renderOverlay();
+    rafId=requestAnimationFrame(tick);
+  };
+  rafId=requestAnimationFrame(tick);
+}
+
+// ---------- eventos del video ----------
+video.addEventListener("loadedmetadata",()=>{
+  duration=video.duration||0;
+  $("tIni").value=0;$("tFin").value=fmt(duration,2);
+  $("durLabel").textContent="/ "+fmt(duration,2)+" s";
+  $("seekbar").max=duration||0.001;
+  measure();
+  if(!video.videoWidth)showErr("El navegador no puede decodificar este video (suele pasar con .MOV/HEVC del iPhone). Convertilo a MP4 H.264.");
+  else showErr(null);
+});
+video.addEventListener("error",()=>showErr("No se pudo abrir el video. Probá con MP4 H.264."));
+video.addEventListener("timeupdate",()=>{if(!playing){time=video.currentTime;updateTimeUI();renderOverlay();}});
+video.addEventListener("play",()=>setPlaying(true));
+video.addEventListener("pause",()=>setPlaying(false));
+video.addEventListener("click",()=>{if(!drawMode)toggle();});
+function showErr(m){const e=$("err");if(m){e.textContent=m;e.hidden=false;}else e.hidden=true;}
+
+$("file").addEventListener("change",e=>{
+  const f=e.target.files&&e.target.files[0];
+  if(!f)return;
+  if(src)URL.revokeObjectURL(src);
+  src=URL.createObjectURL(f);
+  VA.src=src;
+  showErr(null);time=0;draft=[];marks=[];ocultas=new Set();
+  $("empty").hidden=true;$("timechip").hidden=false;
+  ["b-shot","b-ini","b-fin","b-exp-tramo","b-exp-full"].forEach(id=>$(id).disabled=false);
+  renderMarkList();renderOverlay();
+});
+
+$("file2").addEventListener("change",e=>{
+  const f=e.target.files&&e.target.files[0];if(!f)return;
+  if(VB.src)URL.revokeObjectURL(VB.src);
+  VB.src=URL.createObjectURL(f);VB.addEventListener("loadedmetadata",()=>{video.currentTime=video.currentTime;},{once:true});
+  showErr(null);$("empty").hidden=true;$("timechip").hidden=false;
+  ["b-shot","b-ini","b-fin","b-exp-tramo","b-exp-full"].forEach(id=>$(id).disabled=false);
+  renderOverlay();
+});
+$("offB").addEventListener("input",e=>{offB=Number(e.target.value)||0;video.pause();video.currentTime=video.currentTime;});
+function stepB(f){video.pause();offB=Math.round((offB+f/fps)*1000)/1000;$("offB").value=offB.toFixed(3);video.currentTime=video.currentTime;}
+function stepA(f){video.pause();const t=Math.max(0,Math.min(VA.duration||0,VA.currentTime+f/fps));offB=Math.round((offB-(t-VA.currentTime))*1000)/1000;$("offB").value=offB.toFixed(3);VA.currentTime=t;time=t;updateTimeUI();renderOverlay();}
+$("bA-1").addEventListener("click",()=>stepA(-1));$("bA+1").addEventListener("click",()=>stepA(1));
+$("bB-1").addEventListener("click",()=>stepB(-1));$("bB+1").addEventListener("click",()=>stepB(1));
+$("seekbar").addEventListener("input",e=>{video.pause();seek(Number(e.target.value));});
+$("b-play").addEventListener("click",toggle);
+$("b-10").addEventListener("click",()=>step(-10));
+$("b-1").addEventListener("click",()=>step(-1));
+$("b+1").addEventListener("click",()=>step(1));
+$("b+10").addEventListener("click",()=>step(10));
+$("fps").addEventListener("change",e=>{fps=Number(e.target.value)||30;$("seekbar").step=1/fps;});
+
+// velocidades
+const ratesEl=$("rates");
+RATES.forEach(r=>{
+  const b=document.createElement("button");
+  b.className="sm"+(r===rate?" active":"");b.textContent=r+"x";
+  b.addEventListener("click",()=>{
+    rate=r;video.playbackRate=r;
+    [...ratesEl.children].forEach((c,i)=>c.classList.toggle("active",RATES[i]===r));
+    $("b-slow").textContent=expLento?`Cámara lenta ${rate}x`:"Velocidad normal";
+  });
+  ratesEl.appendChild(b);
+});
+
+// ---------- herramientas de dibujo ----------
+const toolsEl=$("tools");
+TOOLS.forEach(([k,label])=>{
+  const b=document.createElement("button");
+  b.className="sm"+(k===tool?" active":"");b.textContent=label;
+  b.addEventListener("click",()=>{
+    tool=k;drawMode=true;updateDrawMode();
+    [...toolsEl.children].forEach((c,i)=>c.classList.toggle("active",TOOLS[i][0]===k));
+  });
+  toolsEl.appendChild(b);
+});
+const colorsEl=$("colors");
+COLORS.forEach(([name,val])=>{
+  const b=document.createElement("button");
+  b.style.background=val;b.title=name;b.setAttribute("aria-label",name);
+  if(val===color)b.classList.add("sel");
+  b.addEventListener("click",()=>{
+    color=val;
+    [...colorsEl.children].forEach((c,i)=>c.classList.toggle("sel",COLORS[i][1]===val));
+  });
+  colorsEl.appendChild(b);
+});
+$("width").addEventListener("input",e=>{width=Number(e.target.value);$("wLabel").textContent=width;});
+function updateDrawMode(){
+  overlay.classList.toggle("draw",drawMode);
+  overlay.classList.toggle("nodraw",!drawMode);
+  const b=$("b-drawmode");
+  b.textContent=drawMode?"Dibujo activo":"Dibujo apagado";
+  b.classList.toggle("active",drawMode);
+}
+$("b-drawmode").addEventListener("click",()=>{drawMode=!drawMode;updateDrawMode();});
+$("b-undo").addEventListener("click",()=>{angleStep=0;draft=draft.slice(0,-1);renderOverlay();});
+$("b-clear").addEventListener("click",()=>{angleStep=0;draft=[];renderOverlay();});
+
+function pt(e){
+  const r=overlay.getBoundingClientRect();
+  return[Math.min(1,Math.max(0,(e.clientX-r.left)/r.width)),Math.min(1,Math.max(0,(e.clientY-r.top)/r.height))];
+}
+overlay.addEventListener("pointerdown",e=>{
+  if(!drawMode)return;
+  e.preventDefault();
+  video.pause();
+  const[x,y]=pt(e);
+  if(tool==="angulo"){
+    if(angleStep===0){angleStep=1;draft.push({id:newId("s"),kind:"angulo",color,width,points:[x,y,x,y]});}
+    else if(angleStep===1){angleStep=2;const l=draft[draft.length-1];if(l)l.points=[l.points[0],l.points[1],x,y,x,y];}
+    else{angleStep=0;const l=draft[draft.length-1];if(l){l.points[4]=x;l.points[5]=y;}}
+    renderOverlay();return;
+  }
+  overlay.setPointerCapture(e.pointerId);
+  drawing=true;
+  draft.push({id:newId("s"),kind:tool,color,width,points:[x,y,x,y]});
+  renderOverlay();
+});
+overlay.addEventListener("pointermove",e=>{
+  if(drawMode&&tool==="angulo"&&angleStep>0){
+    const[x,y]=pt(e),i=angleStep===1?2:4;
+    const l=draft[draft.length-1];
+    if(l){l.points[i]=x;l.points[i+1]=y;renderOverlay();}
+    return;
+  }
+  if(!drawMode||!drawing)return;
+  e.preventDefault();
+  const[x,y]=pt(e),l=draft[draft.length-1];
+  if(!l)return;
+  l.points=l.kind==="libre"?[...l.points,x,y]:[l.points[0],l.points[1],x,y];
+  renderOverlay();
+});
+const endDraw=e=>{if(!drawing)return;drawing=false;try{overlay.releasePointerCapture(e.pointerId);}catch{}};
+overlay.addEventListener("pointerup",endDraw);
+overlay.addEventListener("pointercancel",endDraw);
+overlay.addEventListener("pointerleave",endDraw);
+
+// ---------- marcas ----------
+$("mDur").addEventListener("input",e=>{dur=Number(e.target.value);$("durVal").textContent=dur;});
+$("mText").addEventListener("input",renderOverlay);
+$("b-freeze").addEventListener("click",()=>{
+  congelar=!congelar;
+  const b=$("b-freeze");
+  b.textContent=congelar?"⏸ Pausa automática en las marcas":"▶ Sin pausa en las marcas";
+  b.classList.toggle("active",congelar);
+});
+$("b-save").addEventListener("click",()=>{
+  const txt=$("mText").value.trim();
+  if(!draft.length&&!txt)return;
+  marks=[...marks,{id:newId(),t:time,dur,texto:txt,shapes:draft}].sort((a,b)=>a.t-b.t);
+  draft=[];$("mText").value="";
+  renderMarkList();renderOverlay();
+});
+function renderMarkList(){
+  const list=$("markList");list.innerHTML="";
+  $("markHint").hidden=marks.length>0;
+  for(const m of marks){
+    const row=document.createElement("div");row.className="markrow";
+    const t=document.createElement("button");t.className="t";t.textContent=fmt(m.t,2)+" s";
+    t.addEventListener("click",()=>{video.pause();seek(m.t);});
+    const s=document.createElement("span");s.className="txt";s.textContent=m.texto||"(dibujo)";
+    const del=document.createElement("button");del.className="del";del.textContent="Borrar";
+    del.addEventListener("click",()=>{marks=marks.filter(x=>x.id!==m.id);renderMarkList();renderOverlay();});
+    row.append(t,s,del);list.appendChild(row);
+  }
+}
+
+// ---------- captura PNG ----------
+$("b-shot").addEventListener("click",()=>{
+  if(!video.videoWidth)return;
+  const c=document.createElement("canvas");
+  c.width=video.videoWidth;c.height=video.videoHeight;
+  const ctx=c.getContext("2d");
+  ctx.drawImage(VC,0,0,c.width,c.height);
+  const vis=activeMarksAt(time).filter(m=>!ocultas.has(m.id));
+  drawOverlay(ctx,c.width,c.height,[...vis.flatMap(m=>m.shapes),...draft],vis);
+  c.toBlob(b=>{
+    if(!b)return;
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(b);
+    a.download=`captura-${fmt(time,2)}s.png`;
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+  },"image/png");
+});
+
+// ---------- exportación de video ----------
+$("b-ini").addEventListener("click",()=>{$("tIni").value=fmt(time,2);});
+$("b-fin").addEventListener("click",()=>{$("tFin").value=fmt(time,2);});
+$("b-slow").addEventListener("click",()=>{
+  expLento=!expLento;
+  $("b-slow").textContent=expLento?`Cámara lenta ${rate}x`:"Velocidad normal";
+  $("b-slow").classList.toggle("active",expLento);
+});
+async function exportar(desde,hasta){
+  if(!video.videoWidth||exportando)return;
+  const ini=Math.max(0,Math.min(desde,video.duration||0));
+  const fin=Math.min(video.duration||0,Math.max(hasta,ini+0.2));
+  const scale=Math.min(1,1280/Math.max(video.videoWidth,video.videoHeight));
+  const c=document.createElement("canvas");
+  c.width=Math.round(video.videoWidth*scale/2)*2;
+  c.height=Math.round(video.videoHeight*scale/2)*2;
+  const ctx=c.getContext("2d");
+  const mime=["video/mp4;codecs=avc1","video/webm;codecs=vp9","video/webm"].find(
+    m=>typeof MediaRecorder!=="undefined"&&MediaRecorder.isTypeSupported(m));
+  if(!mime){showErr("Este navegador no permite exportar video. Probá en Chrome de escritorio.");return;}
+
+  exportando=true;$("expMsg").hidden=false;
+  cancelResume();video.pause();video.currentTime=ini;
+  await new Promise(res=>{const on=()=>{video.removeEventListener("seeked",on);res();};video.addEventListener("seeked",on);});
+
+  const stream=c.captureStream(30);
+  const rec=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:8_000_000});
+  const chunks=[];
+  rec.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};
+  const done=new Promise(res=>{rec.onstop=res;});
+  rec.start();
+
+  video.playbackRate=expLento?rate:1;
+  await video.play().catch(()=>{});
+
+  let raf=0;
+  const draw=()=>{
+    ctx.clearRect(0,0,c.width,c.height);
+    ctx.fillStyle="#000";ctx.fillRect(0,0,c.width,c.height);
+    ctx.drawImage(VC,0,0,c.width,c.height);
+    const vis=activeMarksAt(video.currentTime);
+    drawOverlay(ctx,c.width,c.height,vis.flatMap(m=>m.shapes),vis);
+    const label=fmt(video.currentTime-ini,2)+" s";
+    const fs=Math.round(c.height*0.05);
+    ctx.font=`700 ${fs}px monospace`;
+    const w=ctx.measureText(label).width+fs*0.8;
+    ctx.fillStyle="rgba(0,0,0,0.65)";
+    ctx.beginPath();ctx.roundRect(c.width-w-16,16,w,fs*1.5,10);ctx.fill();
+    ctx.fillStyle="#fff";ctx.textAlign="center";ctx.textBaseline="middle";
+    ctx.fillText(label,c.width-w/2-16,16+fs*0.75);
+    ctx.textAlign="left";ctx.textBaseline="alphabetic";
+    if(video.currentTime>=fin||video.ended){video.pause();rec.stop();return;}
+    raf=requestAnimationFrame(draw);
+  };
+  raf=requestAnimationFrame(draw);
+
+  await done;
+  cancelAnimationFrame(raf);
+  video.playbackRate=rate;
+  const blob=new Blob(chunks,{type:mime});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download=`video-${fmt(ini,1)}-${fmt(fin,1)}s.${mime.includes("mp4")?"mp4":"webm"}`;
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),8000);
+  exportando=false;$("expMsg").hidden=true;
+}
+$("b-exp-tramo").addEventListener("click",()=>exportar(Number($("tIni").value)||0,Number($("tFin").value)||duration));
+$("b-exp-full").addEventListener("click",()=>exportar(0,duration));
+
+updateDrawMode();
+</script>
+<script src="../shell.js"></script>
+</body>
+</html>
