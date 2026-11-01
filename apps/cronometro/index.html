@@ -2006,7 +2006,7 @@ function renderSplitMarks(s){
   el.innerHTML=h;el.style.display="flex";
 }
 document.addEventListener("click",function(e){var t=e.target.closest&&e.target.closest(".split-mark-btn");if(!t)return;
-  var s=sw();if(!s||s.state==="repping")return;var d=parseInt(t.getAttribute("data-d"),10);
+  var s=swimmers.find(function(x){return x.id===selId;});if(!s||s.state==="repping")return;var d=parseInt(t.getAttribute("data-d"),10);
   var cur=activeSplitMarks(s),i=cur.indexOf(d);if(i>=0)cur.splice(i,1);else cur.push(d);
   s.splitMarks=cur.sort(function(a,b){return a-b;});try{saveSessions();}catch(_){}renderSplitMarks(s);});
 function splitLabel(b,idx,marks){ // idx base 0
