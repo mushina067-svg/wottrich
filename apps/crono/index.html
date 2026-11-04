@@ -344,8 +344,8 @@ input { font-family: inherit; }
     <div class="card-box">
     <div class="lbl">Nadadores</div>
     <div class="fld">
-      <input id="new-name" type="text" placeholder="Nombre">
-      <button class="chk on" style="width:34px;">+</button>
+      <input id="new-name" type="text" placeholder="Nombre" onkeydown="if(event.key==='Enter'){event.preventDefault();addAthlete();}">
+      <button type="button" class="chk on" style="width:34px;" onclick="addAthlete()">+</button>
     </div>
     <div id="alist" style="margin-top:8px;"><div class="hint">Agregá nadadores arriba.</div></div>
     </div>
