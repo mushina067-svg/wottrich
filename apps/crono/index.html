@@ -57,6 +57,9 @@ input { font-family: inherit; }
 .seg button { flex: 1 1 0%; padding: 9px 0px; border-radius: 9px; border: 1px solid transparent; background: transparent; color: var(--muted); font-size: 12px; font-weight: 600; transition: 0.15s; }
 
 .seg button.sel { background: var(--surf); color: var(--text); border-color: var(--b2); box-shadow: var(--shadow); }
+.spicks { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.spicks button { padding: 7px 10px; border-radius: 9px; border: 1px solid var(--b1); background: var(--surf2); color: var(--muted); font-size: 12px; font-weight: 600; transition: 0.15s; cursor: pointer; }
+.spicks button.sel { background: var(--surf); color: var(--text); border-color: var(--b2); box-shadow: var(--shadow); }
 
 .wide { width: 100%; padding: 11px; border-radius: var(--rs); border: 1px solid var(--ab); background: var(--ad); color: var(--at); font-size: 12px; font-weight: 600; }
 
@@ -286,7 +289,7 @@ input { font-family: inherit; }
   <div class="logo">⏱</div>
   <div>
     <h1>Wottrich · Cronómetro</h1>
-    <div class="sub">Tiempos y parciales de competencia · v5</div>
+    <div class="sub">Tiempos y parciales de competencia · v6</div>
   </div>
   <div class="spacer"></div>
   <div class="pill mode" id="hdr-mode">Con partida</div>
@@ -326,10 +329,16 @@ input { font-family: inherit; }
     <div class="card-box">
     <div class="lbl">Prueba</div>
     <div class="fld">
-      <input id="cfg-dist" type="text" inputmode="numeric" placeholder="Distancia total (ej: 100)">
-      <input id="cfg-split" type="text" inputmode="text" placeholder="Parciales (ej: 15, 25, 35, 50)">
+      <input id="cfg-dist" type="text" inputmode="numeric" placeholder="Distancia total (ej: 100)" oninput="saveCfg()">
     </div>
-    <div class="hint" id="cfg-hint">Distancia total de la prueba y los metrajes de cada parcial, separados por coma. Si ponés un solo número, se repite cada esa distancia.</div>
+    <div class="lbl" style="margin-top:8px;">Piscina</div>
+    <div class="seg" id="seg-pool">
+      <button id="pool-25" type="button" class="sel" onclick="setPool(25)">25 m</button>
+      <button id="pool-50" type="button" onclick="setPool(50)">50 m</button>
+    </div>
+    <div class="lbl" style="margin-top:8px;">Parciales a marcar</div>
+    <div class="spicks" id="split-chips"></div>
+    <div class="hint" id="cfg-hint">Tocá las distancias donde vas a marcar parcial. Si no elegís ninguna, los parciales se numeran P1, P2…</div>
     </div>
 
     <div class="card-box">
@@ -619,7 +628,7 @@ document.addEventListener('DOMContentLoaded', function(){
 
 /* ══════════════ ESTADO ══════════════ */
 var athletes = [];
-var cfg = {dist:"", split:""};
+var cfg = {dist:"", split:"", pool:25};
 var _pending = false;   // secuencia de audio en curso
 var _raf = null;
 
@@ -666,6 +675,36 @@ function splitLabel(i){
 }
 function splitsPlanned(){ var m=splitMarks(); return m.length>1?m.length:0; }
 
+/* Distancias de parcial seleccionables según la piscina */
+var SPLIT_OPTS={25:[15,25,40,50,65,75,100],50:[15,25,50,65,75,100]};
+function renderSplitChips(){
+  var box=document.getElementById('split-chips'); if(!box) return;
+  var opts=SPLIT_OPTS[cfg.pool]||SPLIT_OPTS[25];
+  var sel=splitMarks();
+  box.innerHTML=opts.map(function(d){
+    return '<button type="button" class="'+(sel.indexOf(d)>=0?'sel':'')
+      +'" onclick="toggleSplitMark('+d+')">'+d+' m</button>';
+  }).join('');
+  var b25=document.getElementById('pool-25'), b50=document.getElementById('pool-50');
+  if(b25) b25.className=cfg.pool===25?'sel':'';
+  if(b50) b50.className=cfg.pool===50?'sel':'';
+}
+function toggleSplitMark(d){
+  var sel=splitMarks();
+  var i=sel.indexOf(d);
+  if(i>=0) sel.splice(i,1); else sel.push(d);
+  sel.sort(function(a,b){return a-b;});
+  cfg.split=sel.join(', ');
+  save(); renderSplitChips(); renderTimes(); renderGrid();
+}
+function setPool(p){
+  cfg.pool=(p===50?50:25);
+  var valid=SPLIT_OPTS[cfg.pool];
+  var sel=splitMarks().filter(function(d){return valid.indexOf(d)>=0;});
+  cfg.split=sel.join(', ');
+  save(); renderSplitChips(); renderTimes(); renderGrid();
+}
+
 /* ══════════════ PERSISTENCIA ══════════════ */
 function save(){
   try{
@@ -689,12 +728,11 @@ function load(){
               splits:x.splits||[],lag:(x.lag==null?null:x.lag),manual:!!x.manual};
     });
     var c=JSON.parse(localStorage.getItem('wtc-cfg')||'{}');
-    cfg.dist=c.dist||""; cfg.split=c.split||"";
+    cfg.dist=c.dist||""; cfg.split=c.split||""; cfg.pool=(c.pool===50?50:25);
   }catch(e){ athletes=[]; }
 }
 function saveCfg(){
   cfg.dist=document.getElementById('cfg-dist').value.trim();
-  cfg.split=document.getElementById('cfg-split').value.trim();
   save(); renderTimes(); renderGrid();
 }
 
@@ -1105,9 +1143,9 @@ function restoreJSON(input){
         return {id:x.id||uid(),name:x.name,on:x.on!==false,times:x.times||[],
                 state:'idle',t0:0,restStart:0,splits:[],lag:null,manual:false};
       });
-      if(d.cfg){ cfg.dist=d.cfg.dist||''; cfg.split=d.cfg.split||''; }
+      if(d.cfg){ cfg.dist=d.cfg.dist||''; cfg.split=d.cfg.split||''; cfg.pool=(d.cfg.pool===50?50:25); }
       document.getElementById('cfg-dist').value=cfg.dist;
-      document.getElementById('cfg-split').value=cfg.split;
+      renderSplitChips();
       save(); renderAll(); setStatus('Respaldo restaurado ✓');
     }catch(e){ alert('El archivo no es un respaldo válido de W·Crono.'); }
   };
@@ -1218,7 +1256,7 @@ function closeReport(){
 function boot(){
   load();
   document.getElementById('cfg-dist').value=cfg.dist;
-  document.getElementById('cfg-split').value=cfg.split;
+  renderSplitChips();
   setStartDelay('normal');
   setRaceStartMode(_raceStartManualMode);
   setStartSound(_startSound);
