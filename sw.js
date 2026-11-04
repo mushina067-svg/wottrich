@@ -1,5 +1,5 @@
 /* Wottrich (iPad) — service worker: guarda todo el paquete para usarlo sin internet */
-const CACHE = 'wottrich-ipad-v6';
+const CACHE = 'wottrich-ipad-v8';
 
 const SHELL = [
   './',
