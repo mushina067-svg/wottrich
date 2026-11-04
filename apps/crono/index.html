@@ -265,7 +265,8 @@ input { font-family: inherit; }
   #rep { position: static; display: block; overflow: visible; }
   #rep .bar { display: none; }
   #rep .body { padding: 0px; max-width: none; }
-}</style>
+}.vel{font-style:normal;color:#f5b942;font-weight:600}
+</style>
 
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -281,19 +282,19 @@ input { font-family: inherit; }
 <body>
 
 <div id="rep"><div class="bar">
-  <button class="sec" type="button">← Volver al cronómetro</button>
-  <button type="button">Imprimir / Guardar PDF</button>
+  <button class="sec" type="button" onclick="closeReport()">← Volver al cronómetro</button>
+  <button type="button" onclick="window.print()">Imprimir / Guardar PDF</button>
 </div><div class="body" id="rep-body"></div></div>
 
 <div class="hdr">
   <div class="logo">⏱</div>
   <div>
     <h1>Wottrich · Cronómetro</h1>
-    <div class="sub">Tiempos y parciales de competencia · v6</div>
+    <div class="sub">Tiempos y parciales de competencia · v7</div>
   </div>
   <div class="spacer"></div>
   <div class="pill mode" id="hdr-mode">Con partida</div>
-  <button class="pill" id="btn-theme" type="button">🌙 Noche</button>
+  <button class="pill" id="btn-theme" type="button" onclick="toggleTheme()">🌙 Noche</button>
 </div>
 
 <div class="wrap">
@@ -301,8 +302,8 @@ input { font-family: inherit; }
     <div class="card-box">
       <div class="lbl">Tipo de inicio</div>
       <div class="seg" id="seg-sound">
-        <button id="snd-on" type="button" class="sel">🔊 Con partida</button>
-        <button id="snd-off" type="button" class="">🤫 Sin partida</button>
+        <button id="snd-on" type="button" onclick="setStartSound(true)" class="sel">🔊 Con partida</button>
+        <button id="snd-off" type="button" onclick="setStartSound(false)" class="">🤫 Sin partida</button>
       </div>
       <div class="hint" id="sound-hint">Suena "A sus marcas" y el pitido oficial; los cronómetros arrancan con la señal.</div>
     </div>
@@ -310,20 +311,20 @@ input { font-family: inherit; }
     <div class="card-box" id="box-sound">
     <div class="lbl">Demora salida</div>
     <div class="seg">
-      <button id="delay-btn-short" class="">1.3s</button>
-      <button id="delay-btn-normal" class="sel">1.6s</button>
-      <button id="delay-btn-long" class="">2.0s</button>
+      <button id="delay-btn-short" onclick="setStartDelay('short')" class="">1.3s</button>
+      <button id="delay-btn-normal" onclick="setStartDelay('normal')" class="sel">1.6s</button>
+      <button id="delay-btn-long" onclick="setStartDelay('long')" class="">2.0s</button>
     </div>
 
     <div class="lbl">Inicio cronómetro</div>
     <div class="seg">
-      <button id="race-mode-auto" class="sel">Auto</button>
-      <button id="race-mode-manual" class="">Manual</button>
+      <button id="race-mode-auto" onclick="setRaceStartMode(false)" class="sel">Auto</button>
+      <button id="race-mode-manual" onclick="setRaceStartMode(true)" class="">Manual</button>
     </div>
     <div class="hint" id="mode-hint">El cronómetro arranca solo, en el instante del pitido.</div>
 
     <div class="lbl">Audio</div>
-    <button class="wide" id="btn-test-audio">🔊 Test audio partida</button>
+    <button class="wide" id="btn-test-audio" onclick="testRaceAudio()">🔊 Test audio partida</button>
     </div>
 
     <div class="card-box">
@@ -352,26 +353,26 @@ input { font-family: inherit; }
 
     <div class="card-box">
     <div class="lbl">Pantalla</div>
-    <button class="wide" type="button" id="btn-wake">☀ Mantener pantalla encendida</button>
+    <button class="wide" type="button" id="btn-wake" onclick="toggleWake()">☀ Mantener pantalla encendida</button>
     <div class="hint" id="wake-hint">Evita que el iPad se apague en medio de la serie.</div>
 
     <div class="lbl">Datos</div>
     <div class="fld">
-      <button class="wide" type="button">↓ Respaldo</button>
-      <button class="wide" type="button">↑ Restaurar</button>
+      <button class="wide" type="button" onclick="backupJSON()">↓ Respaldo</button>
+      <button class="wide" type="button" onclick="document.getElementById('restore-file').click()">↑ Restaurar</button>
     </div>
-    <input id="restore-file" type="file" accept="application/json,.json" style="display:none">
+    <input id="restore-file" type="file" accept="application/json,.json" style="display:none" onchange="restoreJSON(this)">
     <div class="hint" id="storage-hint">Datos guardados en este dispositivo: 0 KB. Descargá un respaldo cada tanto.</div>
     </div>
   </div>
 
   <div class="main">
     <div class="gobar">
-      <button class="go" id="go-btn" disabled="">🏊 PARTIDA</button>
-      <button class="stopall">■ Parar todos</button>
+      <button class="go" id="go-btn" onclick="partida()" disabled="">🏊 PARTIDA</button>
+      <button class="stopall" onclick="stopAll()">■ Parar todos</button>
     </div>
     <div class="status" id="status">Agregá un nadador en el panel para empezar.</div>
-    <div id="undobar" style="display:none;margin:6px 0;padding:8px 10px;border:.5px solid var(--ab);background:var(--ad);border-radius:var(--rs);font-size:12px;display:none;align-items:center;gap:10px;"><span id="undotxt" style="flex:1"></span><button type="button" style="padding:8px 12px;min-height:36px;border-radius:var(--rs);border:.5px solid var(--ab);background:var(--surf2);color:var(--at);">↩ Deshacer</button></div>
+    <div id="undobar" style="display:none;margin:6px 0;padding:8px 10px;border:.5px solid var(--ab);background:var(--ad);border-radius:var(--rs);font-size:12px;display:none;align-items:center;gap:10px;"><span id="undotxt" style="flex:1"></span><button type="button" onclick="undoLast()" style="padding:8px 12px;min-height:36px;border-radius:var(--rs);border:.5px solid var(--ab);background:var(--surf2);color:var(--at);">↩ Deshacer</button></div>
 
     <div class="bgbar" id="bgbar"></div>
     <div class="grid" id="grid"><div class="empty">Activá un nadador en el panel para empezar.</div></div>
@@ -380,9 +381,9 @@ input { font-family: inherit; }
       <h2>Tiempos</h2>
       <div id="times"><div class="empty">Todavía no hay tiempos. Tocá PARTIDA para el primero.</div></div>
       <div class="exp">
-        <button class="x">↓ Excel</button>
-        <button class="p">↓ PDF</button>
-        <button class="r">↻ Borrar tiempos</button>
+        <button class="x" onclick="exportXLSX()">↓ Excel</button>
+        <button class="p" onclick="exportPDF()">↓ PDF</button>
+        <button class="r" onclick="clearTimes()">↻ Borrar tiempos</button>
       </div>
     </div>
   </div>
@@ -673,6 +674,13 @@ function splitLabel(i){
   }
   return 'P'+(i+1);
 }
+function splitMeters(i){
+  var cur=parseFloat(splitLabel(i)); if(!isFinite(cur)||String(splitLabel(i)).charAt(0)==='P') return null;
+  var prev=i>0?parseFloat(splitLabel(i-1)):0; if(!isFinite(prev)) return null;
+  return cur-prev>0?cur-prev:null;
+}
+function splitVel(i,segMs){ var m=splitMeters(i); return (m&&segMs>0)?m/(segMs/1000):null; }
+function velTxt(i,segMs){ var v=splitVel(i,segMs); return v?' <em class="vel">'+v.toFixed(2)+' m/s</em>':''; }
 function splitsPlanned(){ var m=splitMarks(); return m.length>1?m.length:0; }
 
 /* Distancias de parcial seleccionables según la piscina */
@@ -964,7 +972,7 @@ function renderGrid(){
       if(a.splits.length){
         chips='<div class="chips">'+a.splits.map(function(sp,i){
           var extra=(i===0 && a.lag!=null) ? ' <u>con reacción '+fmtS(sp.acum+a.lag)+'</u>' : '';
-          return '<span class="chip"><b>'+splitLabel(i)+'</b> '+fmtS(sp.acum)+' <i>('+fmtS(sp.seg)+')</i>'+extra+'</span>';
+          return '<span class="chip"><b>'+splitLabel(i)+'</b> '+fmtS(sp.acum)+' <i>('+fmtS(sp.seg)+')</i>'+velTxt(i,sp.seg)+extra+'</span>';
         }).join('')+'</div>';
       }
     } else if(a.state==='resting'){
@@ -1041,7 +1049,7 @@ function renderTimes(){
       }
       (t.splits||[]).forEach(function(sp,k){
         var extra=(k===0 && t.lag!=null) ? ' <u>con reacción '+fmtS(sp.acum+t.lag)+'</u>' : '';
-        chips.push('<span><b>'+splitLabel(k)+'</b> '+fmtS(sp.acum)+' <i>('+fmtS(sp.seg)+')</i>'+extra+'</span>');
+        chips.push('<span><b>'+splitLabel(k)+'</b> '+fmtS(sp.acum)+' <i>('+fmtS(sp.seg)+')</i>'+velTxt(k,sp.seg)+extra+'</span>');
       });
       if(chips.length) h+='<div class="sub">'+chips.join('')+'</div>';
       return h;
@@ -1070,7 +1078,7 @@ function exportXLSX(){
   var ns=maxSplits();
   var head=['Nadador','#','Hora','Distancia (m)','Inicio','Reacción (s)','Tiempo (s)','Total desde pitido (s)','Tiempo','Descanso'];
   for(var i=0;i<ns;i++){
-    head.push(splitLabel(i)+' acum (s)', splitLabel(i)+' parcial (s)');
+    head.push(splitLabel(i)+' acum (s)', splitLabel(i)+' parcial (s)', splitLabel(i)+' vel (m/s)');
     if(i===0) head.push(splitLabel(0)+' con reacción (s)');
   }
   var rows=[head];
@@ -1083,7 +1091,7 @@ function exportXLSX(){
              fmtS(t.ms), t.rest>0?fmtRest(t.rest):''];
       for(var k=0;k<ns;k++){
         var sp=(t.splits||[])[k];
-        r.push(sp?parseFloat((sp.acum/1000).toFixed(3)):'', sp?parseFloat((sp.seg/1000).toFixed(3)):'');
+        r.push(sp?parseFloat((sp.acum/1000).toFixed(3)):'', sp?parseFloat((sp.seg/1000).toFixed(3)):'', (sp&&splitVel(k,sp.seg))?parseFloat(splitVel(k,sp.seg).toFixed(2)):'');
         if(k===0) r.push((sp&&t.lag!=null)?parseFloat(((sp.acum+t.lag)/1000).toFixed(3)):'');
       }
       rows.push(r);
@@ -1100,7 +1108,7 @@ function csvCell(v){ v=(v==null?'':String(v)); return /[";\n]/.test(v) ? '"'+v.r
 function exportCSV(){
   var ns=maxSplits();
   var head=['Nadador','#','Hora','Distancia (m)','Inicio','Reaccion (s)','Tiempo (s)','Total desde pitido (s)','Descanso (s)'];
-  for(var i=0;i<ns;i++) head.push(splitLabel(i)+' acum (s)', splitLabel(i)+' parcial (s)');
+  for(var i=0;i<ns;i++) head.push(splitLabel(i)+' acum (s)', splitLabel(i)+' parcial (s)', splitLabel(i)+' vel (m/s)');
   var rows=[head];
   athletes.forEach(function(a){
     a.times.forEach(function(t,i){
@@ -1108,7 +1116,7 @@ function exportCSV(){
              t.lag!=null?(t.lag/1000).toFixed(3):'', (t.ms/1000).toFixed(3),
              t.lag!=null?((t.ms+t.lag)/1000).toFixed(3):'', t.rest>0?(t.rest/1000).toFixed(1):''];
       for(var k=0;k<ns;k++){ var sp=(t.splits||[])[k];
-        r.push(sp?(sp.acum/1000).toFixed(3):'', sp?(sp.seg/1000).toFixed(3):''); }
+        r.push(sp?(sp.acum/1000).toFixed(3):'', sp?(sp.seg/1000).toFixed(3):'', (sp&&splitVel(k,sp.seg))?splitVel(k,sp.seg).toFixed(2):''); }
       rows.push(r);
     });
   });
@@ -1234,7 +1242,7 @@ function exportPDF(){
           var sp=(t.splits||[])[k];
           if(sp){
             var extra=(k===0&&t.lag!=null)?'<span class="sg">c/reac '+fmtS(sp.acum+t.lag)+'</span>':'';
-            h+='<td>'+fmtS(sp.acum)+'<span class="sg">('+fmtS(sp.seg)+')</span>'+extra+'</td>';
+            h+='<td>'+fmtS(sp.acum)+'<span class="sg">('+fmtS(sp.seg)+')</span>'+(splitVel(k,sp.seg)?'<span class="sg">'+splitVel(k,sp.seg).toFixed(2)+' m/s</span>':'')+extra+'</td>';
           } else h+='<td>—</td>';
         }
         h+='</tr>';
