@@ -222,6 +222,21 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:1
       </div>
     </div>
 
+    <!-- COMIDAS POR DÍA -->
+    <div class="section">
+      <div class="section-title">Comidas por día</div>
+      <div class="field">
+        <label>Cantidad de comidas diarias</label>
+        <select id="num-comidas">
+          <option value="2">2 comidas al día</option>
+          <option value="3">3 comidas al día</option>
+          <option value="4" selected>4 comidas al día</option>
+          <option value="5">5 comidas al día</option>
+        </select>
+        <div class="activity-hint">Las calorías, carbohidratos y proteínas del día se reparten entre las comidas elegidas.</div>
+      </div>
+    </div>
+
     <div class="btn-row no-print">
       <button class="btn" onclick="calcular()">Calcular plan nutricional</button>
       <button class="btn btn-outline" onclick="resetForm()">Limpiar</button>
@@ -268,14 +283,31 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:1
 </div>
 
 <script>
-const MEALS = [
-  { name:'Desayuno',      sub:'Inicio del día',                  prot:0.18, carb:0.20, cal:0.20, color:'#4f8ef7' },
-  { name:'Media mañana',  sub:'Colación matutina',               prot:0.08, carb:0.08, cal:0.08, color:'#38d9a9' },
-  { name:'Almuerzo',      sub:'Comida principal del día',        prot:0.28, carb:0.25, cal:0.28, color:'#f7a84f' },
-  { name:'Pre-entreno',   sub:'60–90 min antes del entreno',     prot:0.08, carb:0.17, cal:0.12, color:'#b47fff' },
-  { name:'Post-entreno',  sub:'Proteína + CHO de recuperación',  prot:0.20, carb:0.15, cal:0.14, color:'#f46b6b' },
-  { name:'Cena',          sub:'Última comida del día',           prot:0.18, carb:0.15, cal:0.18, color:'#4f8ef7' },
-];
+// Distribuciones según cantidad de comidas diarias (fracciones del total del día)
+const MEAL_PLANS = {
+  2: [
+    { name:'Almuerzo', sub:'Primera comida del día',  cal:0.50, carb:0.50, prot:0.50, color:'#f7a84f' },
+    { name:'Cena',     sub:'Última comida del día',   cal:0.50, carb:0.50, prot:0.50, color:'#4f8ef7' },
+  ],
+  3: [
+    { name:'Desayuno', sub:'Inicio del día',          cal:0.25, carb:0.25, prot:0.25, color:'#4f8ef7' },
+    { name:'Almuerzo', sub:'Comida principal del día',cal:0.40, carb:0.40, prot:0.40, color:'#f7a84f' },
+    { name:'Cena',     sub:'Última comida del día',   cal:0.35, carb:0.35, prot:0.35, color:'#38d9a9' },
+  ],
+  4: [
+    { name:'Desayuno', sub:'Inicio del día',          cal:0.22, carb:0.22, prot:0.22, color:'#4f8ef7' },
+    { name:'Almuerzo', sub:'Comida principal del día',cal:0.35, carb:0.35, prot:0.35, color:'#f7a84f' },
+    { name:'Merienda', sub:'Colación de la tarde',    cal:0.13, carb:0.13, prot:0.13, color:'#b47fff' },
+    { name:'Cena',     sub:'Última comida del día',   cal:0.30, carb:0.30, prot:0.30, color:'#38d9a9' },
+  ],
+  5: [
+    { name:'Desayuno',     sub:'Inicio del día',          cal:0.20, carb:0.20, prot:0.20, color:'#4f8ef7' },
+    { name:'Media mañana', sub:'Colación matutina',       cal:0.08, carb:0.08, prot:0.08, color:'#38d9a9' },
+    { name:'Almuerzo',     sub:'Comida principal del día',cal:0.32, carb:0.32, prot:0.32, color:'#f7a84f' },
+    { name:'Merienda',     sub:'Colación de la tarde',    cal:0.10, carb:0.10, prot:0.10, color:'#b47fff' },
+    { name:'Cena',         sub:'Última comida del día',   cal:0.30, carb:0.30, prot:0.30, color:'#f46b6b' },
+  ],
+};
 
 function updatePalHint() {
   const hints = {
@@ -417,7 +449,9 @@ function calcular() {
   let tbody = '';
   let totCal=0, totCarb=0, totProt=0;
   const { tdeeTotal: tdeeFin, protFinal: pF, carbFinal: cF } = window._calc;
-  MEALS.forEach(m => {
+  const numComidas = parseInt(document.getElementById('num-comidas').value, 10) || 4;
+  const plan = MEAL_PLANS[numComidas] || MEAL_PLANS[4];
+  plan.forEach(m => {
     const mCal  = rnd(tdeeFin * m.cal);
     const mCarb = rnd(cF * m.carb);
     const mProt = rnd(pF * m.prot);
@@ -456,7 +490,7 @@ function calcular() {
   const fecha = now.toLocaleDateString('es-PE',{year:'numeric',month:'long',day:'numeric'});
   const surplusLabel = surplus > 0 ? ` · Superávit +${surplus} kcal/día` : ' · Mantenimiento';
   document.getElementById('print-header').innerHTML =
-    `<strong>${nombre}</strong> · ${sexo==='m'?'Masculino':'Femenino'} · ${edad} años · ${peso} kg · ${talla} cm · PAL ${pal}${surplusLabel} · Fecha: ${fecha}`;
+    `<strong>${nombre}</strong> · ${sexo==='m'?'Masculino':'Femenino'} · ${edad} años · ${peso} kg · ${talla} cm · PAL ${pal}${surplusLabel} · ${numComidas} comidas/día · Fecha: ${fecha}`;
 
   document.getElementById('input-section').style.display  = 'none';
   document.getElementById('results-section').style.display = 'block';
@@ -676,7 +710,7 @@ function exportarPDF() {
     Estimaciones basadas en la fórmula de Harris-Benedict y coeficientes estándar de nutrición deportiva. No reemplaza la evaluación de un nutricionista deportivo.
   </div>
   <div class="no-print" style="padding:20px 0;display:flex;gap:12px;">
-    <button onclick="window.print()" style="background:#111;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;cursor:pointer;">Imprimir / Guardar PDF</button>
+    <button onclick="window.print()" style="background:#111;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;cursor:pointer;">Guardar PDF</button>
     <button onclick="window.close()" style="background:transparent;border:1px solid #ccc;border-radius:8px;padding:10px 20px;font-size:14px;cursor:pointer;">Cerrar</button>
   </div>
   </body></html>`;
@@ -707,6 +741,5 @@ function resetForm() {
   updatePalHint();
 }
 </script>
-<script src="../shell.js"></script>
 </body>
 </html>
