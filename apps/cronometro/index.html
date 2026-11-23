@@ -2957,15 +2957,26 @@ function importProfiles(file){
 function poolOf(x){return x&&(x.pool===50||x.pool==="50")?50:25;}
 var _histPool=25;
 function _histView(h){return(h||[]).filter(function(x){return poolOf(x)===_histPool;});}
-function getHist(){try{return JSON.parse(localStorage.getItem("swim-v6")||"[]");}catch(e){return[];}}
-function getHistDel(){try{var a=JSON.parse(localStorage.getItem("wt-hist-del")||"[]");return Array.isArray(a)?a.map(String):[];}catch(e){return[];}}
+var _histCache=null;
+function _idb(cb){try{var r=indexedDB.open("wtimer-db",1);r.onupgradeneeded=function(){r.result.createObjectStore("kv");};r.onsuccess=function(){cb(r.result);};r.onerror=function(){cb(null);};}catch(e){cb(null);}}
+function _idbPut(k,v){_idb(function(db){if(!db)return;try{db.transaction("kv","readwrite").objectStore("kv").put(v,k);}catch(e){}});}
+function _idbGet(k,cb){_idb(function(db){if(!db)return cb(null);try{var q=db.transaction("kv").objectStore("kv").get(k);q.onsuccess=function(){cb(q.result);};q.onerror=function(){cb(null);};}catch(e){cb(null);}});}
+function getHist(){if(_histCache)return JSON.parse(JSON.stringify(_histCache));try{return JSON.parse(localStorage.getItem("swim-v6")||"[]");}catch(e){return[];}}
+function _mergeHist(a,b){var m={},out=[];(a||[]).concat(b||[]).forEach(function(s){if(!s)return;var k=s.id!=null?String(s.id):JSON.stringify(s).slice(0,200);if(!m[k]){m[k]=1;out.push(s);}});return out;}
+// Al abrir: si el historial grande vive en IndexedDB, cargarlo y unirlo
+_idbGet("swim-v6",function(v){if(!v)return;try{var big=JSON.parse(v),del=getHistDel();big=big.filter(function(s){return !(s&&s.id!=null&&del.indexOf(String(s.id))>=0);});var loc=[];try{loc=JSON.parse(localStorage.getItem("swim-v6")||"[]");}catch(e){}_histCache=_mergeHist(loc,big);if(typeof renderHistory==="function")try{renderHistory();}catch(e){}}catch(e){}});function getHistDel(){try{var a=JSON.parse(localStorage.getItem("wt-hist-del")||"[]");return Array.isArray(a)?a.map(String):[];}catch(e){return[];}}
 function saveHist(h){try{
   var prev=getHist(), keep={}, del=getHistDel(), added=false;
   (h||[]).forEach(function(s){if(s&&s.id!=null)keep[String(s.id)]=1;});
   prev.forEach(function(s){var k=s&&s.id!=null?String(s.id):null;if(k&&!keep[k]&&del.indexOf(k)<0){del.push(k);added=true;}});
   if(added){if(del.length>800)del=del.slice(-800);localStorage.setItem("wt-hist-del",JSON.stringify(del));}
-  localStorage.setItem("swim-v6",JSON.stringify(h));
-}catch(e){}}
+  var txt=JSON.stringify(h);_histCache=JSON.parse(txt);_idbPut("swim-v6",txt);
+  try{localStorage.setItem("swim-v6",txt);}catch(q){
+    // Memoria del navegador llena: el historial completo queda en IndexedDB (sin limite de 5 MB)
+    try{localStorage.removeItem("swim-v6");}catch(z){}
+    if(!sessionStorage.getItem("wt-idb-note")){sessionStorage.setItem("wt-idb-note","1");console.warn("Historial movido a IndexedDB");}
+  }
+}catch(e){alert("No se pudo guardar el historial: "+e.message);}}
 function updateHistTab(n){document.getElementById("tab-history").textContent="Historial"+(n>0?" ("+n+")":"");}
 var _histMode="calendar"; // "list" | "calendar"
 
@@ -6305,13 +6316,33 @@ function closeEditModal(){document.getElementById("edit-session-modal").style.di
     r.onload = function(){
       try{
         var dump = JSON.parse(r.result);
-        if(!dump || dump._app !== "wtimer" || !dump.data) throw new Error("formato");
-        if(!confirm("Esto va a REEMPLAZAR nadadores, plantillas e historial actuales por los del respaldo.\n\n\u00bfContinuar?")) return;
-        Object.keys(dump.data).forEach(function(k){ localStorage.setItem(k, dump.data[k]); });
-        alert("Respaldo restaurado. La app se va a recargar.");
-        location.reload();
+        if(dump && !dump.data && (dump["swim-v6"]||dump["swim-profiles"])) dump={_app:"wtimer",data:dump};
+        if(!dump || !dump.data) throw new Error("formato");
       }catch(e){
         alert("El archivo no es un respaldo valido de W\u00b7Timer.");
+        return;
+      }
+      if(!confirm("Se van a cargar los datos del respaldo.\nEl historial se UNE con el actual (no se pierde ninguna sesion).\n\n\u00bfContinuar?")) return;
+      try{
+        var d=dump.data, hv=d["swim-v6"];
+        if(hv){
+          var bk=typeof hv==="string"?JSON.parse(hv):hv;
+          localStorage.removeItem("wt-hist-del");
+          var merged=_mergeHist(getHist(),bk);
+          merged.sort(function(a,b){return (Number(b.id)||0)-(Number(a.id)||0);});
+          var txt=JSON.stringify(merged);
+          _idbPut("swim-v6",txt);
+          try{localStorage.setItem("swim-v6",txt);}catch(q){try{localStorage.removeItem("swim-v6");}catch(z){}}
+        }
+        Object.keys(d).forEach(function(k){
+          if(k==="swim-v6"||k==="wt-hist-del") return;
+          var v=typeof d[k]==="string"?d[k]:JSON.stringify(d[k]);
+          try{localStorage.setItem(k,v);}catch(q){}
+        });
+        alert("Respaldo restaurado. La app se va a recargar.");
+        setTimeout(function(){location.reload();},600);
+      }catch(e){
+        alert("No se pudo restaurar: "+e.message);
       }
     };
     r.readAsText(file);
@@ -6387,7 +6418,7 @@ function closeEditModal(){document.getElementById("edit-session-modal").style.di
           "<div id='wt-storage-lbl' style='font-size:11px;color:var(--faint);margin-bottom:12px;'></div>" +
           "<div style='display:flex;gap:8px;'>" +
             "<button id='wt-btn-backup' style='flex:1;min-height:44px;padding:10px;border-radius:var(--rs);border:.5px solid var(--gb);background:var(--gd);color:var(--gt);font-size:13px;cursor:pointer;font-family:inherit;'>\u2193 Descargar respaldo</button>" +
-            "<label style='flex:1;min-height:44px;padding:10px;border-radius:var(--rs);border:.5px solid var(--bb);background:var(--bd);color:var(--bt);font-size:13px;cursor:pointer;font-family:inherit;text-align:center;display:flex;align-items:center;justify-content:center;'>\u2191 Restaurar<input type='file' id='wt-inp-restore' accept='.json' style='display:none'></label>" +
+            "<label style='flex:1;min-height:44px;padding:10px;border-radius:var(--rs);border:.5px solid var(--bb);background:var(--bd);color:var(--bt);font-size:13px;cursor:pointer;font-family:inherit;text-align:center;display:flex;align-items:center;justify-content:center;'>\u2191 Restaurar<input type='file' id='wt-inp-restore' style='display:none'></label>" +
           "</div>" +
         "</div>";
       cfg.appendChild(box);
