@@ -217,6 +217,8 @@ body{display:flex;flex-direction:column;}
 .rep-edit-cancel{flex:1;padding:12px;border-radius:var(--rs);border:.5px solid var(--b2);background:none;color:var(--muted);font-size:14px;cursor:pointer;font-family:inherit;}
 .rep-edit-confirm{flex:1;padding:12px;border-radius:var(--rs);border:none;background:var(--green);color:#fff;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;}
 .rep-edit-btn-pencil{background:var(--surf2);border:.5px solid var(--b2);border-radius:8px;color:var(--at);font-size:18px;cursor:pointer;padding:6px 12px;margin-left:8px;line-height:1;vertical-align:middle;min-width:44px;min-height:36px;touch-action:manipulation;}
+.reps-cur-hdr{color:var(--gt,#22c55e)!important;font-weight:700;}
+.reps-prev-tog{display:block;width:100%;margin:12px 0 4px;padding:8px 10px;border-radius:var(--rs);border:.5px solid var(--b1);background:transparent;color:var(--muted);font:inherit;font-size:12px;text-align:left;cursor:pointer;}
 .reps-blk-hdr{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin:10px 0 4px;}
 .rep-edit-btn-pencil:active{color:var(--at);}
 
@@ -2550,9 +2552,17 @@ function renderRepsList(s){
   if(!order.length){hdr.className="reps-hdr";body.innerHTML="";return;}
   hdr.className="reps-hdr vis";
   var html="";
-  order.forEach(function(bi){
+  // v52: el bloque actual siempre arriba y destacado; los anteriores quedan plegados
+  var _hasCur=order[0]===s.curBlock;
+  order.forEach(function(bi,oi){
   var b=s.blocks[bi];
-  if(order.length>1)html+='<div class="reps-blk-hdr">'+(bi===s.curBlock?'▶ ':'')+(b.name||('Bloque '+(bi+1)))+'</div>';
+  if(oi===(_hasCur?1:0)&&order.length>(_hasCur?1:0)){
+    var _open=!!(window._prevBlocksOpen&&window._prevBlocksOpen[s.id]);
+    html+='<button class="reps-prev-tog" onclick="togglePrevBlocks(\''+s.id+'\')">'+(_open?'▾':'▸')+' Bloques anteriores ('+(order.length-(_hasCur?1:0))+')</button>';
+    html+='<div class="reps-prev" style="display:'+(_open?'block':'none')+'">';
+  }
+  if(bi===s.curBlock)html+='<div class="reps-blk-hdr reps-cur-hdr">▶ BLOQUE ACTUAL · '+(b.name||('Bloque '+(bi+1)))+'</div>';
+  else html+='<div class="reps-blk-hdr">'+(b.name||('Bloque '+(bi+1)))+'</div>';
   b.completedReps.slice().reverse().forEach(function(r){
     var diff=r.comp?'<span class="rd2 '+r.comp.cls+'">'+r.comp.diffStr+'</span>':'<span class="rd2 c-none">—</span>';
     var pct=r.comp?'<span class="rp2 '+r.comp.cls+'">'+r.comp.pctStr+'</span>':'<span class="rp2 c-none">—</span>';
@@ -2577,7 +2587,17 @@ function renderRepsList(s){
     }
   });
   });
+  if(order.length>(_hasCur?1:0))html+='</div>';
   body.innerHTML=html;
+  // v52: al registrar un tiempo nuevo o cambiar de nadador, volver arriba para ver el último tiempo
+  var _cb=s.blocks&&s.blocks[s.curBlock];
+  var _key=s.id+'|'+s.curBlock+'|'+((_cb&&_cb.completedReps)?_cb.completedReps.length:0);
+  if(window._repsKey!==_key){window._repsKey=_key;var _ar=body.closest('.reps-area');if(_ar)_ar.scrollTop=0;}
+}
+function togglePrevBlocks(id){
+  window._prevBlocksOpen=window._prevBlocksOpen||{};
+  window._prevBlocksOpen[id]=!window._prevBlocksOpen[id];
+  var sw=swimmers.find(function(x){return x.id===id;});if(sw)renderRepsList(sw);
 }
 
 // ── REP TIME EDIT MODAL ───────────────────────────────────────────
